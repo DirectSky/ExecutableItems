@@ -13,8 +13,8 @@ import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.jetbrains.annotations.NotNull;
 
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -56,6 +56,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             case "permission" -> handlePermission(player, args);
             case "save"       -> handleSave(player, args);
             case "give"       -> handleGive(player, args);
+            case "rename"     -> handleRename(player, args);
             case "copy"       -> handleCopy(player);
             case "paste"      -> handlePaste(player);
             default           -> player.sendMessage(plugin.getConfigManager().getMessage("invalid-subcommand"));
@@ -101,8 +102,16 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         String linkedCommand = String.join(" ", Arrays.copyOfRange(args, 1, commandEnd));
 
         ItemMeta meta = item.getItemMeta();
-        meta.getPersistentDataContainer().set(plugin.getCommandKey(), PersistentDataType.STRING, linkedCommand);
-        meta.getPersistentDataContainer().set(plugin.getRunAsKey(), PersistentDataType.STRING, runAs);
+        PersistentDataContainer pdc = meta.getPersistentDataContainer();
+
+        // If commands already exist, store as list separated by \n
+        String existing = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
+        String newValue = (existing == null || existing.isEmpty())
+                ? linkedCommand
+                : existing + "\n" + linkedCommand;
+
+        pdc.set(plugin.getCommandKey(), PersistentDataType.STRING, newValue);
+        pdc.set(plugin.getRunAsKey(), PersistentDataType.STRING, runAs);
         item.setItemMeta(meta);
 
         player.sendMessage(plugin.getConfigManager().getMessage("linked"));
@@ -130,7 +139,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // Remove all EI data
         pdc.remove(plugin.getCommandKey());
         pdc.remove(plugin.getRunAsKey());
         pdc.remove(plugin.getCooldownKey());
@@ -141,7 +149,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(plugin.getConfigManager().getMessage("unlinked"));
     }
 
-    // --- /ei onaction <clear <single|slot> | damage <amount> | count <amount> | drop | remove> ---
+    // --- /ei onaction <type> [args] | remove ---------------------------------
 
     private void handleOnAction(Player player, String[] args) {
         if (!player.hasPermission("executableitems.link")) {
@@ -149,7 +157,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 2) {
-            player.sendMessage(colorize("&7Usage: /ei onaction <clear <single|slot> | damage <amount> | count <amount> | drop | remove>"));
+            player.sendMessage(colorize("&7Usage: /ei onaction <clear <single|slot> | damage <n> | count <n> | drop | remove>"));
             return;
         }
 
@@ -184,23 +192,15 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
                 storedValue = "clear:" + mode;
             }
             case "damage" -> {
-                if (args.length < 3) {
+                if (args.length < 3 || !isPositiveInt(args[2])) {
                     player.sendMessage(colorize("&7Usage: /ei onaction damage <amount>"));
-                    return;
-                }
-                if (!isPositiveInt(args[2])) {
-                    player.sendMessage(colorize("&cAmount must be a positive number."));
                     return;
                 }
                 storedValue = "damage:" + args[2];
             }
             case "count" -> {
-                if (args.length < 3) {
+                if (args.length < 3 || !isPositiveInt(args[2])) {
                     player.sendMessage(colorize("&7Usage: /ei onaction count <amount>"));
-                    return;
-                }
-                if (!isPositiveInt(args[2])) {
-                    player.sendMessage(colorize("&cAmount must be a positive number."));
                     return;
                 }
                 storedValue = "count:" + args[2];
@@ -226,7 +226,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 2) {
-            player.sendMessage(colorize("&7Usage: /ei cooldown <seconds>  (&7-1 = use global default)"));
+            player.sendMessage(colorize("&7Usage: /ei cooldown <seconds>  (-1 = use global default)"));
             return;
         }
 
@@ -250,7 +250,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
 
         ItemMeta meta = item.getItemMeta();
         if (seconds < 0) {
-            // -1 = remove override, fall back to global
             meta.getPersistentDataContainer().remove(plugin.getCooldownKey());
             item.setItemMeta(meta);
             player.sendMessage(plugin.getConfigManager().getMessage("cooldown-reset"));
@@ -371,6 +370,39 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
                 .replace("%amount%", String.valueOf(amount)));
     }
 
+    // --- /ei rename <old> <new> ----------------------------------------------
+
+    private void handleRename(Player player, String[] args) {
+        if (!player.hasPermission("executableitems.save")) {
+            player.sendMessage(plugin.getConfigManager().getMessage("no-permission"));
+            return;
+        }
+        if (args.length < 3) {
+            player.sendMessage(colorize("&7Usage: /ei rename <old-name> <new-name>"));
+            return;
+        }
+
+        String oldName = args[1].toLowerCase();
+        String newName = args[2].toLowerCase();
+
+        if (!plugin.getItemRegistry().exists(oldName)) {
+            player.sendMessage(plugin.getConfigManager().getMessage("item-not-found")
+                    .replace("%name%", oldName));
+            return;
+        }
+
+        if (plugin.getItemRegistry().exists(newName)) {
+            player.sendMessage(plugin.getConfigManager().getMessage("item-name-taken")
+                    .replace("%name%", newName));
+            return;
+        }
+
+        plugin.getItemRegistry().renameItem(oldName, newName);
+        player.sendMessage(plugin.getConfigManager().getMessage("item-renamed")
+                .replace("%old%", oldName)
+                .replace("%new%", newName));
+    }
+
     // --- /ei copy ------------------------------------------------------------
 
     private void handleCopy(Player player) {
@@ -413,7 +445,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
-        // Transfer all EI PDC keys from source to target
         PersistentDataContainer sourcePdc = source.getItemMeta().getPersistentDataContainer();
         ItemMeta targetMeta = target.getItemMeta();
         PersistentDataContainer targetPdc = targetMeta.getPersistentDataContainer();
@@ -454,8 +485,11 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         String perm    = pdc.get(plugin.getUsePermissionKey(), PersistentDataType.STRING);
         Integer cdItem = pdc.get(plugin.getCooldownKey(), PersistentDataType.INTEGER);
 
+        // Format multiple commands nicely
+        String cmdDisplay = cmd.replace("\n", "\n&8  > &f");
+
         player.sendMessage(colorize("&8&m              &r &bExecutableItems Info &8&m              "));
-        player.sendMessage(colorize("&7Command:    &f" + cmd));
+        player.sendMessage(colorize("&7Command(s): &f" + cmdDisplay));
         player.sendMessage(colorize("&7Run as:     &f" + runAs));
         player.sendMessage(colorize("&7Cooldown:   &f" + (cdItem != null ? cdItem + "s" : "global (" + plugin.getConfigManager().getCooldown() + "s)")));
         player.sendMessage(colorize("&7Permission: &f" + (perm != null && !perm.isEmpty() ? perm : "none")));
@@ -481,18 +515,19 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(colorize("&8&m              &r &bExecutableItems &7v"
                 + plugin.getDescription().getVersion() + " &8by &7"
                 + String.join(", ", plugin.getDescription().getAuthors()) + " &8&m              "));
-        player.sendMessage(colorize("&e/ei link <command> [player|op]  &8- &7Link a command to the held item"));
-        player.sendMessage(colorize("&e/ei unlink  &8- &7Remove all EI data from the held item"));
-        player.sendMessage(colorize("&e/ei onaction <type> [args]  &8- &7Set what happens to the item on use"));
+        player.sendMessage(colorize("&e/ei link <command> [player|op]       &8- &7Link/add a command to the held item"));
+        player.sendMessage(colorize("&e/ei unlink                           &8- &7Remove all EI data from the held item"));
+        player.sendMessage(colorize("&e/ei onaction <type> [args]           &8- &7Set what happens to the item on use"));
         player.sendMessage(colorize("  &8> &7clear <single|slot>, damage <n>, count <n>, drop, remove"));
-        player.sendMessage(colorize("&e/ei cooldown <seconds>  &8- &7Per-item cooldown (-1 = global default)"));
-        player.sendMessage(colorize("&e/ei permission <node|remove>  &8- &7Restrict item use to a permission"));
-        player.sendMessage(colorize("&e/ei info  &8- &7Show all linked data of the held item"));
-        player.sendMessage(colorize("&e/ei save <name>  &8- &7Save held item to the registry"));
-        player.sendMessage(colorize("&e/ei give <player> <name> [amount]  &8- &7Give a saved item to a player"));
-        player.sendMessage(colorize("&e/ei copy  &8- &7Copy EI data from held item"));
-        player.sendMessage(colorize("&e/ei paste  &8- &7Paste copied EI data onto held item"));
-        player.sendMessage(colorize("&e/ei reload  &8- &7Reload config and items.yml"));
+        player.sendMessage(colorize("&e/ei cooldown <seconds>               &8- &7Per-item cooldown (-1 = global)"));
+        player.sendMessage(colorize("&e/ei permission <node|remove>         &8- &7Restrict item use to a permission"));
+        player.sendMessage(colorize("&e/ei info                             &8- &7Show all linked data of the held item"));
+        player.sendMessage(colorize("&e/ei save <name>                      &8- &7Save held item to the registry"));
+        player.sendMessage(colorize("&e/ei give <player> <name> [amount]    &8- &7Give a saved item to a player"));
+        player.sendMessage(colorize("&e/ei rename <old> <new>               &8- &7Rename a saved item"));
+        player.sendMessage(colorize("&e/ei copy                             &8- &7Copy EI data from held item"));
+        player.sendMessage(colorize("&e/ei paste                            &8- &7Paste copied EI data onto held item"));
+        player.sendMessage(colorize("&e/ei reload                           &8- &7Reload config and items.yml"));
         player.sendMessage(colorize("&8&m                                              "));
     }
 
@@ -505,7 +540,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
                                       @NotNull String label, @NotNull String[] args) {
         if (args.length == 1) {
             return List.of("link", "unlink", "info", "help", "reload",
-                    "onaction", "cooldown", "permission", "save", "give", "copy", "paste");
+                    "onaction", "cooldown", "permission", "save", "give", "rename", "copy", "paste");
         }
 
         switch (args[0].toLowerCase()) {
@@ -536,6 +571,13 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
                     return names.isEmpty() ? List.of("<name>") : new ArrayList<>(names);
                 }
                 if (args.length == 4) return List.of("1", "16", "32", "64");
+            }
+            case "rename" -> {
+                if (args.length == 2) {
+                    Set<String> names = plugin.getItemRegistry().getAllNames();
+                    return names.isEmpty() ? List.of("<old-name>") : new ArrayList<>(names);
+                }
+                if (args.length == 3) return List.of("<new-name>");
             }
         }
 

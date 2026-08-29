@@ -70,6 +70,19 @@ public class ItemRegistry {
         save();
     }
 
+    /**
+     * Renames a saved item. Returns false if oldName doesn't exist or newName is already taken.
+     */
+    public boolean renameItem(String oldName, String newName) {
+        if (!exists(oldName)) return false;
+        if (exists(newName)) return false;
+        String data = itemsConfig.getString("items." + oldName);
+        itemsConfig.set("items." + newName, data);
+        itemsConfig.set("items." + oldName, null);
+        save();
+        return true;
+    }
+
     public Set<String> getAllNames() {
         if (!itemsConfig.isConfigurationSection("items")) return Collections.emptySet();
         return itemsConfig.getConfigurationSection("items").getKeys(false);

@@ -6,7 +6,7 @@ defaults:
 messages:
   prefix: "&8[&bEI&8] "
   # Item link
-  linked: "&aItem successfully linked!"
+  linked: "&aCommand added to item!"
   unlinked: "&cAll EI data removed from item."
   not-linked: "&cThis item has no linked command."
   # General
@@ -15,8 +15,6 @@ messages:
   cooldown: "&cPlease wait &e%seconds% &cmore second(s)."
   invalid-subcommand: "&cUnknown subcommand. Use &f/ei help &cfor help."
   reloaded: "&aConfiguration reloaded successfully."
-  # Info
-  info-command: "&7Command: &f%command% &8(run as: %run-as%)"
   # OnAction
   onaction-set: "&aOn-action set to: &f%action%"
   onaction-removed: "&cOn-action removed."
@@ -26,10 +24,12 @@ messages:
   # Per-item permission
   permission-set: "&aUse permission set to &f%permission%&a."
   permission-removed: "&7Use permission removed."
-  # Save / Give
+  # Save / Give / Rename
   item-saved: "&aItem saved as &f%name%&a."
   item-not-found: "&cNo saved item named &f%name%&c."
   item-given: "&aGave &e%amount%x &f%name% &ato &f%player%&a."
+  item-renamed: "&aRenamed &f%old% &ato &f%new%&a."
+  item-name-taken: "&cAn item named &f%name% &calready exists."
   player-not-found: "&cPlayer &f%player% &cnot found."
   # Copy / Paste
   copied: "&aEI data copied from item."
