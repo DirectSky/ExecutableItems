@@ -10,7 +10,7 @@ commands:
     aliases:
       - ei
     description: ExecutableItems main command
-    usage: /executableitems <link|unlink|info|help|reload|onaction|cooldown|permission|save|give|copy|paste>
+    usage: /executableitems <link|unlink|info|help|reload|onaction|cooldown|permission|save|give|rename|copy|paste>
 
 permissions:
   executableitems.link:

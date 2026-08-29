@@ -35,3 +35,4 @@ messages:
   copied: "&aEI data copied from item."
   pasted: "&aEI data pasted onto item."
   nothing-copied: "&cNothing copied yet. Use &f/ei copy &cfirst."
+  link-removed: "&cCommand #%index% removed."
