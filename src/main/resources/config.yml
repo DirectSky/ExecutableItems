@@ -1,0 +1,37 @@
+cooldown: 5 # in seconds, 0 = disabled
+
+defaults:
+  run-as: player # player or op
+
+messages:
+  prefix: "&8[&bEI&8] "
+  # Item link
+  linked: "&aItem successfully linked!"
+  unlinked: "&cAll EI data removed from item."
+  not-linked: "&cThis item has no linked command."
+  # General
+  no-permission: "&cYou don't have permission to do that."
+  no-item-in-hand: "&cYou must hold an item in your hand."
+  cooldown: "&cPlease wait &e%seconds% &cmore second(s)."
+  invalid-subcommand: "&cUnknown subcommand. Use &f/ei help &cfor help."
+  reloaded: "&aConfiguration reloaded successfully."
+  # Info
+  info-command: "&7Command: &f%command% &8(run as: %run-as%)"
+  # OnAction
+  onaction-set: "&aOn-action set to: &f%action%"
+  onaction-removed: "&cOn-action removed."
+  # Per-item cooldown
+  cooldown-set: "&aPer-item cooldown set to &e%seconds%s&a."
+  cooldown-reset: "&7Per-item cooldown removed. Using global default."
+  # Per-item permission
+  permission-set: "&aUse permission set to &f%permission%&a."
+  permission-removed: "&7Use permission removed."
+  # Save / Give
+  item-saved: "&aItem saved as &f%name%&a."
+  item-not-found: "&cNo saved item named &f%name%&c."
+  item-given: "&aGave &e%amount%x &f%name% &ato &f%player%&a."
+  player-not-found: "&cPlayer &f%player% &cnot found."
+  # Copy / Paste
+  copied: "&aEI data copied from item."
+  pasted: "&aEI data pasted onto item."
+  nothing-copied: "&cNothing copied yet. Use &f/ei copy &cfirst."

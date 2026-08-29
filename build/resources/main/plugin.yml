@@ -1,0 +1,36 @@
+name: ExecutableItems
+version: '1.0.0'
+main: de.Sky.executableItems.Main
+api-version: '1.21'
+author: DirectSky943
+description: Link commands to items and execute them on right-click.
+
+commands:
+  executableitems:
+    aliases:
+      - ei
+    description: ExecutableItems main command
+    usage: /executableitems <link|unlink|info|help|reload|onaction|cooldown|permission|save|give|copy|paste>
+
+permissions:
+  executableitems.link:
+    description: Allows linking, unlinking, copy/paste, onaction, cooldown and permission setup
+    default: op
+  executableitems.info:
+    description: Allows viewing linked command info on an item
+    default: op
+  executableitems.use:
+    description: Allows using (right-clicking) linked items
+    default: true
+  executableitems.bypass.cooldown:
+    description: Bypasses the use cooldown
+    default: op
+  executableitems.reload:
+    description: Allows reloading the plugin config
+    default: op
+  executableitems.save:
+    description: Allows saving items to the registry
+    default: op
+  executableitems.give:
+    description: Allows giving saved items to players
+    default: op
