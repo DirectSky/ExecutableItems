@@ -16,8 +16,7 @@ repositories {
 }
 
 dependencies {
-    // 1.21.4 ist derzeit die stabilste 1.21-Version.
-    // Kompiliert gegen 1.21.4 -> läuft auf 1.21.4+
+    
     compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
     implementation("org.bstats:bstats-bukkit:3.2.1")
 }
@@ -48,8 +47,6 @@ tasks.withType(JavaCompile).configureEach {
 
 tasks.shadowJar {
     archiveClassifier.set('')
-    // bStats in eigenes Package verschieben, damit's nicht mit
-    // anderen Plugins kollidiert
     relocate("org.bstats", "de.Sky.executableItems.libs.bstats")
 }
 
