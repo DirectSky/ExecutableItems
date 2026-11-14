@@ -24,8 +24,6 @@ public class ItemListener implements Listener {
 
     @EventHandler
     public void onPlayerInteract(PlayerInteractEvent event) {
-
-        // Right-click only, main hand only
         if (event.getAction() != Action.RIGHT_CLICK_AIR
                 && event.getAction() != Action.RIGHT_CLICK_BLOCK) return;
         if (event.getHand() != EquipmentSlot.HAND) return;
@@ -38,13 +36,9 @@ public class ItemListener implements Listener {
         PersistentDataContainer pdc = item.getItemMeta().getPersistentDataContainer();
         if (!pdc.has(plugin.getCommandKey(), PersistentDataType.STRING)) return;
 
-        String linkedCommand = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
-        String runAs         = pdc.getOrDefault(plugin.getRunAsKey(), PersistentDataType.STRING, "player");
-        String onAction      = pdc.get(plugin.getOnActionKey(), PersistentDataType.STRING);
-
-        // --- Permission checks ---
         if (!player.hasPermission("executableitems.use")) {
             player.sendMessage(plugin.getConfigManager().getMessage("no-permission"));
+            event.setCancelled(true);
             return;
         }
 
@@ -52,38 +46,60 @@ public class ItemListener implements Listener {
         if (usePermission != null && !usePermission.isEmpty()
                 && !player.hasPermission(usePermission)) {
             player.sendMessage(plugin.getConfigManager().getMessage("no-permission"));
+            event.setCancelled(true);
             return;
         }
 
-        // --- Cooldown check (FIXED) ---
         if (!player.hasPermission("executableitems.bypass.cooldown")
-                && plugin.getCooldownManager().isOnCooldown(player.getUniqueId())) {
-
-            long remaining = plugin.getCooldownManager().getRemainingSeconds(player.getUniqueId());
+                && plugin.getCooldownManager().isOnCooldown(player.getUniqueId(), item)) {
+            long remaining = plugin.getCooldownManager().getRemainingSeconds(player.getUniqueId(), item);
             player.sendMessage(plugin.getConfigManager().getMessage("cooldown")
                     .replace("%seconds%", String.valueOf(remaining)));
+            event.setCancelled(true);
             return;
         }
 
-        // --- Execute command ---
-        String finalCommand = linkedCommand.replace("%player%", player.getName());
+        String raw = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
+        String runAsRaw = pdc.get(plugin.getRunAsKey(), PersistentDataType.STRING);
+        String onAction = pdc.get(plugin.getOnActionKey(), PersistentDataType.STRING);
 
-        if (runAs.equalsIgnoreCase("op")) {
-            plugin.getServer().dispatchCommand(plugin.getServer().getConsoleSender(), finalCommand);
-        } else {
-            plugin.getServer().dispatchCommand(player, finalCommand);
+        String[] commands = raw.split("\n");
+        String[] runAsArr = (runAsRaw == null || runAsRaw.isEmpty())
+                ? new String[]{"player"}
+                : runAsRaw.split("\n");
+
+        boolean executedAny = false;
+        for (int i = 0; i < commands.length; i++) {
+            String command = commands[i].trim();
+            if (command.isEmpty()) continue;
+
+            String cmdRunAs = runAsArr.length == 1
+                    ? runAsArr[0]
+                    : (i < runAsArr.length ? runAsArr[i] : "player");
+
+            String finalCommand = command.replace("%player%", player.getName());
+
+            if (cmdRunAs.equalsIgnoreCase("op")) {
+                if (!plugin.getConfigManager().isOpExecutionAllowed()) {
+                    plugin.getLogger().warning(
+                            "Blocked 'op' execution (allow-op-execution=false): " + finalCommand);
+                    continue;
+                }
+                plugin.getServer().dispatchCommand(plugin.getServer().getConsoleSender(), finalCommand);
+            } else {
+                plugin.getServer().dispatchCommand(player, finalCommand);
+            }
+            executedAny = true;
         }
 
-        // --- Set cooldown (FIXED) ---
-        plugin.getCooldownManager().setCooldown(player.getUniqueId());
-
-        // --- Apply onAction ---
-        if (onAction != null && !onAction.isEmpty()) {
-            applyOnAction(player, onAction);
+        if (executedAny) {
+            event.setCancelled(true);
+            plugin.getCooldownManager().setCooldown(player.getUniqueId(), item);
+            if (onAction != null && !onAction.isEmpty()) {
+                applyOnAction(player, onAction);
+            }
         }
     }
-
-    // -------------------------------------------------------------------------
 
     private void applyOnAction(Player player, String onAction) {
         String[] parts = onAction.split(":", 2);
@@ -91,12 +107,12 @@ public class ItemListener implements Listener {
         String arg  = parts.length > 1 ? parts[1] : "";
 
         switch (type) {
-
             case "clear" -> {
-                ItemStack item = player.getInventory().getItemInMainHand();
                 if (arg.equals("slot")) {
                     player.getInventory().setItemInMainHand(null);
                 } else {
+                    ItemStack item = player.getInventory().getItemInMainHand();
+                    if (item == null || item.getType().isAir()) return;
                     if (item.getAmount() <= 1) {
                         player.getInventory().setItemInMainHand(null);
                     } else {
@@ -104,25 +120,23 @@ public class ItemListener implements Listener {
                     }
                 }
             }
-
             case "count" -> {
                 int amount = parseIntSafe(arg, 1);
                 ItemStack item = player.getInventory().getItemInMainHand();
+                if (item == null || item.getType().isAir()) return;
                 if (item.getAmount() <= amount) {
                     player.getInventory().setItemInMainHand(null);
                 } else {
                     item.setAmount(item.getAmount() - amount);
                 }
             }
-
             case "damage" -> {
                 int dmg = parseIntSafe(arg, 1);
                 ItemStack item = player.getInventory().getItemInMainHand();
+                if (item == null || item.getType().isAir()) return;
                 ItemMeta meta = item.getItemMeta();
-
                 if (meta instanceof Damageable damageable) {
                     int newDamage = damageable.getDamage() + dmg;
-
                     if (newDamage >= item.getType().getMaxDurability()) {
                         player.getInventory().setItemInMainHand(null);
                         player.playSound(player.getLocation(), Sound.ENTITY_ITEM_BREAK, 1f, 1f);
@@ -132,11 +146,12 @@ public class ItemListener implements Listener {
                     }
                 }
             }
-
             case "drop" -> {
-                ItemStack item = player.getInventory().getItemInMainHand().clone();
+                ItemStack item = player.getInventory().getItemInMainHand();
+                if (item == null || item.getType().isAir()) return;
+                ItemStack toDrop = item.clone();
                 player.getInventory().setItemInMainHand(null);
-                player.getWorld().dropItemNaturally(player.getLocation(), item);
+                player.getWorld().dropItemNaturally(player.getLocation(), toDrop);
             }
         }
     }

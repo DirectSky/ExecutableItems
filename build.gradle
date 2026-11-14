@@ -1,6 +1,7 @@
 plugins {
     id 'java'
     id("xyz.jpenilla.run-paper") version "2.3.1"
+    id("com.gradleup.shadow") version "9.3.1"
 }
 
 group = 'de.Sky'
@@ -15,12 +16,15 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.11-R0.1-SNAPSHOT")
+    // 1.21.4 ist derzeit die stabilste 1.21-Version.
+    // Kompiliert gegen 1.21.4 -> läuft auf 1.21.4+
+    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    implementation("org.bstats:bstats-bukkit:3.2.1")
 }
 
 tasks {
     runServer {
-        minecraftVersion("1.21")
+        minecraftVersion("1.21.4")
     }
 }
 
@@ -41,6 +45,15 @@ tasks.withType(JavaCompile).configureEach {
         options.release.set(targetJavaVersion)
     }
 }
+
+tasks.shadowJar {
+    archiveClassifier.set('')
+    // bStats in eigenes Package verschieben, damit's nicht mit
+    // anderen Plugins kollidiert
+    relocate("org.bstats", "de.Sky.executableItems.libs.bstats")
+}
+
+tasks.build.dependsOn tasks.shadowJar
 
 processResources {
     def props = [version: version]

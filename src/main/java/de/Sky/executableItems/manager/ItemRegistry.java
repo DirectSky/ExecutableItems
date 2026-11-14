@@ -38,18 +38,12 @@ public class ItemRegistry {
         itemsConfig = YamlConfiguration.loadConfiguration(itemsFile);
     }
 
-    /**
-     * Saves an ItemStack (including all PDC data) under the given name.
-     */
     public void saveItem(String name, ItemStack item) {
         byte[] bytes = item.serializeAsBytes();
         itemsConfig.set("items." + name, Base64.getEncoder().encodeToString(bytes));
         save();
     }
 
-    /**
-     * Returns a fresh copy of the saved item, or null if not found.
-     */
     public ItemStack getItem(String name) {
         String base64 = itemsConfig.getString("items." + name);
         if (base64 == null) return null;
@@ -70,9 +64,6 @@ public class ItemRegistry {
         save();
     }
 
-    /**
-     * Renames a saved item. Returns false if oldName doesn't exist or newName is already taken.
-     */
     public boolean renameItem(String oldName, String newName) {
         if (!exists(oldName)) return false;
         if (exists(newName)) return false;

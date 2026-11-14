@@ -5,6 +5,7 @@ import de.Sky.executableItems.listener.ItemListener;
 import de.Sky.executableItems.manager.ConfigManager;
 import de.Sky.executableItems.manager.CooldownManager;
 import de.Sky.executableItems.manager.ItemRegistry;
+import org.bstats.bukkit.Metrics;
 import org.bukkit.NamespacedKey;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -20,37 +21,82 @@ public class Main extends JavaPlugin {
     private ConfigManager configManager;
     private CooldownManager cooldownManager;
     private ItemRegistry itemRegistry;
-
-    // PDC Keys
     private NamespacedKey commandKey;
     private NamespacedKey runAsKey;
     private NamespacedKey cooldownKey;
     private NamespacedKey usePermissionKey;
     private NamespacedKey onActionKey;
 
-    // In-memory copy/paste buffer per player
     private final Map<UUID, ItemStack> copyBuffer = new HashMap<>();
 
     @Override
     public void onEnable() {
         instance = this;
-        saveDefaultConfig();
 
-        commandKey       = new NamespacedKey(this, "command");
-        runAsKey         = new NamespacedKey(this, "run-as");
-        cooldownKey      = new NamespacedKey(this, "cooldown");
-        usePermissionKey = new NamespacedKey(this, "use-permission");
-        onActionKey      = new NamespacedKey(this, "onaction");
+        getLogger().info("Loading Config..");
+        try {
+            saveDefaultConfig();
+        } catch (Exception e) {
+            getLogger().severe("Failed to load config.yml. This will cause the plugin to crash! Caused in: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        getLogger().info("Config loaded.");
 
-        configManager   = new ConfigManager(this);
-        cooldownManager = new CooldownManager(this);
-        itemRegistry    = new ItemRegistry(this);
+        try {
+            commandKey       = new NamespacedKey(this, "command");
+            runAsKey         = new NamespacedKey(this, "run-as");
+            cooldownKey      = new NamespacedKey(this, "cooldown");
+            usePermissionKey = new NamespacedKey(this, "use-permission");
+            onActionKey      = new NamespacedKey(this, "onaction");
+        } catch (Exception e) {
+            getLogger().severe("Failed to create NamespacedKeys! Caused in: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
-        ExecutableItemsCommand handler = new ExecutableItemsCommand(this);
-        getCommand("executableitems").setExecutor(handler);
-        getCommand("executableitems").setTabCompleter(handler);
+        try {
+            configManager   = new ConfigManager(this);
+            cooldownManager = new CooldownManager(this);
+            itemRegistry    = new ItemRegistry(this);
+        } catch (Exception e) {
+            getLogger().severe("Failed to initialise managers! Caused in: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
 
-        getServer().getPluginManager().registerEvents(new ItemListener(this), this);
+        getLogger().info("Registering Commands..");
+        if (getCommand("executableitems") == null) {
+            getLogger().severe("Command 'executableitems' is missing from plugin.yml! Plugin will be disabled.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+        try {
+            ExecutableItemsCommand handler = new ExecutableItemsCommand(this);
+            getCommand("executableitems").setExecutor(handler);
+            getCommand("executableitems").setTabCompleter(handler);
+        } catch (Exception e) {
+            getLogger().severe("Failed to register commands! Caused in: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        try {
+            getServer().getPluginManager().registerEvents(new ItemListener(this), this);
+        } catch (Exception e) {
+            getLogger().severe("Failed to register ItemListener! Caused in: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
+        getLogger().info("Enabling bStats..");
+        try {
+            int pluginID = 35319;
+            new Metrics(this, pluginID);
+            getLogger().info("Hooked into bStats");
+        } catch (Exception e) {
+            getLogger().warning("Failed to hook into bStats: " + e.getMessage());
+        }
 
         getLogger().info("ExecutableItems enabled!");
     }

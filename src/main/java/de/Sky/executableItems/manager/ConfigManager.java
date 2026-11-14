@@ -23,13 +23,16 @@ public class ConfigManager {
         return plugin.getConfig().getString("defaults.run-as", "player").toLowerCase();
     }
 
+    public boolean isOpExecutionAllowed() {
+        return plugin.getConfig().getBoolean("allow-op-execution", true);
+    }
+
     public String getMessage(String key) {
         String prefix = color(plugin.getConfig().getString("messages.prefix", "&8[&bEI&8] "));
         String msg    = plugin.getConfig().getString("messages." + key, "&cMissing message: " + key);
         return prefix + color(msg);
     }
 
-    /** Returns a colorized message without the plugin prefix. */
     public String getMessageRaw(String key) {
         return color(plugin.getConfig().getString("messages." + key, "&cMissing message: " + key));
     }

@@ -2,6 +2,10 @@ cooldown: 5 # in seconds, 0 = disabled
 
 defaults:
   run-as: player # player or op
+  # WARNING: 'op' mode runs commands as the CONSOLE (full server permissions).
+  # Only keep this enabled if you trust every item author on your server.
+  # Setting to false blocks 'op' execution entirely.
+  allow-op-execution: true
 
 messages:
   prefix: "&8[&bEI&8] "

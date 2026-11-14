@@ -57,10 +57,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         return true;
     }
 
-    // -------------------------------------------------------------------------
-    // /ei link add <command> [player|op]
-    // /ei link remove <index>
-    // -------------------------------------------------------------------------
 
     private void handleLink(Player player, String[] args) {
         if (!player.hasPermission("executableitems.link")) {
@@ -83,7 +79,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleLinkAdd(Player player, String[] args) {
-        // args: [link, add, <cmd...>, [player|op]]
         if (args.length < 3) {
             player.sendMessage(colorize("&7Usage: /ei link add <command> [player|op]"));
             return;
@@ -106,24 +101,53 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             return;
         }
 
+        if (runAs.equals("op")) {
+            if (!plugin.getConfigManager().isOpExecutionAllowed()) {
+                player.sendMessage(colorize(
+                        "&c'op' mode is disabled in config.yml (allow-op-execution: false)."));
+                return;
+            }
+            player.sendMessage(colorize(
+                    "&e&l\u26a0 WARNING: &e'op' mode runs the command as the &c&lCONSOLE&e. " +
+                            "Only use on items you fully trust!"));
+        }
+
         String newCommand = String.join(" ", Arrays.copyOfRange(args, 2, commandEnd));
         ItemMeta meta = item.getItemMeta();
         PersistentDataContainer pdc = meta.getPersistentDataContainer();
 
-        String existing = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
-        String newValue = (existing == null || existing.isEmpty())
-                ? newCommand
-                : existing + "\n" + newCommand;
+        String existingCmd   = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
+        String existingRunAs = pdc.get(plugin.getRunAsKey(), PersistentDataType.STRING);
 
-        pdc.set(plugin.getCommandKey(), PersistentDataType.STRING, newValue);
-        pdc.set(plugin.getRunAsKey(), PersistentDataType.STRING, runAs);
+        List<String> cmds = (existingCmd == null || existingCmd.isEmpty())
+                ? new ArrayList<>()
+                : new ArrayList<>(Arrays.asList(existingCmd.split("\n")));
+
+        List<String> runAsList = new ArrayList<>();
+        if (existingRunAs != null && !existingRunAs.isEmpty()) {
+            String[] parts = existingRunAs.split("\n");
+            if (parts.length == 1) {
+                for (int i = 0; i < cmds.size(); i++) runAsList.add(parts[0]);
+            } else {
+                runAsList.addAll(Arrays.asList(parts));
+                while (runAsList.size() < cmds.size()) runAsList.add("player");
+                while (runAsList.size() > cmds.size()) runAsList.remove(runAsList.size() - 1);
+            }
+        } else {
+            for (int i = 0; i < cmds.size(); i++) runAsList.add("player");
+        }
+
+        cmds.add(newCommand);
+        runAsList.add(runAs);
+
+        pdc.set(plugin.getCommandKey(), PersistentDataType.STRING, String.join("\n", cmds));
+        pdc.set(plugin.getRunAsKey(),  PersistentDataType.STRING, String.join("\n", runAsList));
         item.setItemMeta(meta);
 
         player.sendMessage(plugin.getConfigManager().getMessage("linked"));
     }
 
     private void handleLinkRemove(Player player, String[] args) {
-        // args: [link, remove, <index>]
         if (args.length < 3) {
             player.sendMessage(colorize("&7Usage: /ei link remove <index>"));
             return;
@@ -144,9 +168,24 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         String raw = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
         List<String> commands = new ArrayList<>(Arrays.asList(raw.split("\n")));
 
+        String runAsRaw = pdc.get(plugin.getRunAsKey(), PersistentDataType.STRING);
+        List<String> runAsList = new ArrayList<>();
+        if (runAsRaw != null && !runAsRaw.isEmpty()) {
+            String[] parts = runAsRaw.split("\n");
+            if (parts.length == 1) {
+                for (int i = 0; i < commands.size(); i++) runAsList.add(parts[0]);
+            } else {
+                runAsList.addAll(Arrays.asList(parts));
+                while (runAsList.size() < commands.size()) runAsList.add("player");
+                while (runAsList.size() > commands.size()) runAsList.remove(runAsList.size() - 1);
+            }
+        } else {
+            for (int i = 0; i < commands.size(); i++) runAsList.add("player");
+        }
+
         int index;
         try {
-            index = Integer.parseInt(args[2]) - 1; // 1-based
+            index = Integer.parseInt(args[2]) - 1; 
         } catch (NumberFormatException e) {
             player.sendMessage(colorize("&cInvalid index."));
             return;
@@ -158,6 +197,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         }
 
         commands.remove(index);
+        if (index < runAsList.size()) runAsList.remove(index);
 
         if (commands.isEmpty()) {
             pdc.remove(plugin.getCommandKey());
@@ -168,13 +208,13 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(plugin.getConfigManager().getMessage("unlinked"));
         } else {
             pdc.set(plugin.getCommandKey(), PersistentDataType.STRING, String.join("\n", commands));
+            pdc.set(plugin.getRunAsKey(),  PersistentDataType.STRING, String.join("\n", runAsList));
             player.sendMessage(plugin.getConfigManager().getMessage("link-removed")
                     .replace("%index%", String.valueOf(index + 1)));
         }
         item.setItemMeta(meta);
     }
 
-    // -------------------------------------------------------------------------
 
     private void handleUnlink(Player player) {
         if (!player.hasPermission("executableitems.link")) {
@@ -377,10 +417,16 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             catch (NumberFormatException e) { player.sendMessage(colorize("&cInvalid amount.")); return; }
         }
         ItemStack item = plugin.getItemRegistry().getItem(name);
+        if (item == null) {
+            player.sendMessage(plugin.getConfigManager().getMessage("item-not-found").replace("%name%", name));
+            return;
+        }
         item.setAmount(amount);
         target.getInventory().addItem(item);
         player.sendMessage(plugin.getConfigManager().getMessage("item-given")
-                .replace("%name%", name).replace("%player%", target.getName()).replace("%amount%", String.valueOf(amount)));
+                .replace("%name%", name)
+                .replace("%player%", target.getName())
+                .replace("%amount%", String.valueOf(amount)));
     }
 
     private void handleRename(Player player, String[] args) {
@@ -467,22 +513,37 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(plugin.getConfigManager().getMessage("not-linked"));
             return;
         }
-        String raw     = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
-        String runAs   = pdc.getOrDefault(plugin.getRunAsKey(), PersistentDataType.STRING, "player");
-        String action  = pdc.get(plugin.getOnActionKey(), PersistentDataType.STRING);
-        String perm    = pdc.get(plugin.getUsePermissionKey(), PersistentDataType.STRING);
-        Integer cdItem = pdc.get(plugin.getCooldownKey(), PersistentDataType.INTEGER);
+
+        String raw      = pdc.get(plugin.getCommandKey(), PersistentDataType.STRING);
+        String runAsRaw = pdc.get(plugin.getRunAsKey(), PersistentDataType.STRING);
+        String action   = pdc.get(plugin.getOnActionKey(), PersistentDataType.STRING);
+        String perm     = pdc.get(plugin.getUsePermissionKey(), PersistentDataType.STRING);
+        Integer cdItem  = pdc.get(plugin.getCooldownKey(), PersistentDataType.INTEGER);
+
         String[] commands = raw.split("\n");
+        String[] runAsArr = (runAsRaw == null || runAsRaw.isEmpty())
+                ? new String[]{"player"}
+                : runAsRaw.split("\n");
+
         player.sendMessage(colorize("&8&m              &r &bExecutableItems Info &8&m              "));
         player.sendMessage(colorize("&7Command(s):"));
+        boolean hasOp = false;
         for (int i = 0; i < commands.length; i++) {
-            player.sendMessage(colorize("  &8[&e" + (i + 1) + "&8] &f" + commands[i]));
+            String cmdRunAs = runAsArr.length == 1
+                    ? runAsArr[0]
+                    : (i < runAsArr.length ? runAsArr[i] : "player");
+            String color = cmdRunAs.equalsIgnoreCase("op") ? "&c" : "&a";
+            if (cmdRunAs.equalsIgnoreCase("op")) hasOp = true;
+            player.sendMessage(colorize("  &8[&e" + (i + 1) + "&8] &f" + commands[i]
+                    + " &8(" + color + cmdRunAs + "&8)"));
         }
-        player.sendMessage(colorize("&7Run as:     &f" + runAs));
         player.sendMessage(colorize("&7Cooldown:   &f" + (cdItem != null
                 ? cdItem + "s" : "global (" + plugin.getConfigManager().getCooldown() + "s)")));
         player.sendMessage(colorize("&7Permission: &f" + (perm != null && !perm.isEmpty() ? perm : "none")));
         player.sendMessage(colorize("&7On action:  &f" + (action != null ? action : "none")));
+        if (hasOp) {
+            player.sendMessage(colorize("&e&l\u26a0 &eThis item contains 'op' commands — they run as &c&lCONSOLE&e!"));
+        }
         player.sendMessage(colorize("&8&m                                              "));
     }
 
@@ -501,6 +562,7 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
                 + plugin.getDescription().getVersion() + " &8by &7"
                 + String.join(", ", plugin.getDescription().getAuthors()) + " &8&m              "));
         player.sendMessage(colorize("&e/ei link add <command> [player|op]   &8- &7Add a command to the held item"));
+        player.sendMessage(colorize("  &c&l\u26a0 &c'op' mode runs commands as console — only use with trusted items!"));
         player.sendMessage(colorize("&e/ei link remove <index>              &8- &7Remove a command by its index"));
         player.sendMessage(colorize("&e/ei unlink                           &8- &7Remove all EI data from the held item"));
         player.sendMessage(colorize("&e/ei onaction <type> [args]           &8- &7Set what happens to the item on use"));
@@ -517,9 +579,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         player.sendMessage(colorize("&8&m                                              "));
     }
 
-    // =========================================================================
-    // Tab completion
-    // =========================================================================
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
@@ -573,9 +632,6 @@ public class ExecutableItemsCommand implements CommandExecutor, TabCompleter {
         return List.of();
     }
 
-    // =========================================================================
-    // Helpers
-    // =========================================================================
 
     private List<String> filter(List<String> options, String current) {
         if (current.isEmpty()) return options;
